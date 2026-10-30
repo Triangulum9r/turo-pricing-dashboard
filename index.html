@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Turo pricing dashboard — interactive prototype</title>
+<style>
+  :root {
+    --ink: #1c1c1c;
+    --muted: #6b6b6b;
+    --faint: #e6e2d8;
+    --grid: #ddd8cc;
+    --paper: #fdfdf9;
+    --boxfill: #c3cfda;
+    --boxline: #5b7186;
+    --accent: #8a5a00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 1240px; padding: 28px 28px 64px;
+    background: var(--paper); color: var(--ink);
+    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  h1 { font-size: 26px; margin: 0 0 4px; font-weight: 650; }
+  h2 { font-size: 19px; margin: 34px 0 10px; font-weight: 650;
+       border-bottom: 1px solid var(--faint); padding-bottom: 4px; }
+  h3 { font-size: 15px; margin: 0; font-weight: 650; }
+  .asof {
+    display: inline-block; margin: 6px 0 2px; padding: 3px 10px;
+    border: 1.5px solid var(--ink); border-radius: 3px;
+    font-weight: 650; font-size: 15px; background: #fff;
+  }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  ul.lede { margin: 10px 0 0; padding-left: 20px; max-width: 100ch; }
+  ul.lede li { margin: 3px 0; }
+  .coverage { color: var(--muted); font-size: 13px; margin-top: 10px;
+              max-width: 110ch; }
+  .coverage div { margin: 2px 0; }
+  .controls {
+    position: sticky; top: 0; z-index: 5; background: var(--paper);
+    padding: 10px 0 8px; border-bottom: 1px solid var(--faint);
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    font-size: 14px;
+  }
+  .controls label { color: var(--muted); }
+  .controls select, .controls button {
+    font: inherit; font-size: 14px; padding: 2px 6px;
+    background: #fff; border: 1px solid #b9b3a4; border-radius: 3px;
+    color: var(--ink); cursor: pointer;
+  }
+  .decision {
+    border-left: 3px solid var(--ink); padding: 6px 0 6px 14px;
+    margin: 12px 0; max-width: 110ch;
+  }
+  .decision .verdict { font-weight: 700; }
+  .decision .meta { color: var(--muted); font-size: 13px; }
+  .decision p { margin: 3px 0; }
+  details.omitted { margin-top: 8px; color: var(--muted); }
+  details.omitted .decision { border-left-color: #b9b3a4; }
+  .carnote { color: var(--muted); max-width: 110ch; margin: 4px 0 14px; }
+  .series {
+    display: grid; grid-template-columns: 545px 1fr; gap: 8px 22px;
+    padding: 14px 0 16px; border-bottom: 1px solid var(--faint);
+  }
+  .series h3 .tags { color: var(--muted); font-weight: 400;
+                     font-size: 13px; }
+  .chart { grid-column: 1; }
+  .ann { grid-column: 2; min-width: 0; }
+  .ann .fulltext { margin: 2px 0 8px; overflow-wrap: break-word; }
+  .flags { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
+  .flag {
+    font-size: 12px; border: 1px solid #b9b3a4; border-radius: 10px;
+    padding: 1px 8px; background: #fff; color: #444;
+  }
+  table.facts { border-collapse: collapse; font-size: 13px; }
+  table.facts td { padding: 1px 14px 1px 0; vertical-align: top; }
+  table.facts td.k { color: var(--muted); white-space: nowrap; }
+  details.traj, details.framerows { margin-top: 10px; }
+  details.traj summary, details.framerows summary {
+    cursor: pointer; color: var(--muted); font-size: 13px;
+  }
+  table.exact {
+    border-collapse: collapse; font-size: 13.5px; margin: 8px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.exact th, table.exact td {
+    padding: 3px 10px; text-align: right; white-space: nowrap;
+  }
+  table.exact th { font-weight: 600; color: #333;
+                   border-bottom: 1.5px solid #999; }
+  table.exact td:first-child, table.exact th:first-child {
+    text-align: left;
+  }
+  table.exact tr td { border-bottom: 1px solid var(--faint); }
+  table.framerows td, table.framerows th { padding: 2px 10px; }
+  .oursrow td { font-weight: 650; }
+  .legend { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .hidden { display: none !important; }
+  #error {
+    border: 1.5px solid #a33; color: #a33; padding: 10px 14px;
+    margin: 16px 0; display: none; background: #fff;
+  }
+  footer { color: var(--muted); font-size: 13px; margin-top: 40px; }
+  @media (max-width: 900px) {
+    .series { grid-template-columns: 1fr; }
+    .chart, .ann { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Turo pricing dashboard</h1>
+  <div><span class="asof" id="asof">Data as of …</span></div>
+  <p class="sub" id="subheader"></p>
+  <ul class="lede" id="lede"></ul>
+  <div class="coverage" id="coverage"></div>
+</header>
+
+<div class="controls" id="controls">
+  <span><label for="carFilter">Car&nbsp;</label>
+    <select id="carFilter"><option value="all">Both cars</option></select></span>
+  <span><label for="frameFilter">Frame&nbsp;</label>
+    <select id="frameFilter"><option value="all">All frames</option></select></span>
+  <span><label><input type="checkbox" id="trajToggle" checked>
+    Trajectory panels</label></span>
+  <button id="expandTraj" type="button">Expand all trajectories</button>
+  <button id="collapseTraj" type="button">Collapse all</button>
+</div>
+
+<div id="error"></div>
+
+<section id="decisions">
+  <h2>Decisions &amp; next steps</h2>
+  <div id="decisionList"></div>
+  <details class="omitted" id="omittedWrap">
+    <summary id="omittedSummary"></summary>
+    <div id="omittedList"></div>
+  </details>
+</section>
+
+<main id="cars"></main>
+
+<footer id="footer"></footer>
+
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+function commas(v) {
+  return Math.abs(v).toLocaleString("en-US",
+    {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function money(v) { return v === null || v === undefined ? "—" : "$" + commas(v); }
+function signedMoney(v) {
+  if (v === null || v === undefined) return "—";
+  return (v < 0 ? "-$" : "+$") + commas(v);
+}
+function intOr(v) { return v === null || v === undefined ? "—" : String(v); }
+
+/* ---------- per-series candle strip (shared per-car money axis) --- */
+function candleStrip(series, axis) {
+  const W = 540, H = 64, L = 6, R = 6, TOP = 14, BOT = 46;
+  const svg = svgEl("svg", {width: W, height: H, class: "strip",
+    "aria-label": series.id});
+  const x = v => L + (v - axis.lo) / (axis.hi - axis.lo) * (W - L - R);
+  for (const t of axis.ticks) {
+    svg.appendChild(svgEl("line", {x1: x(t), y1: 8, x2: x(t), y2: BOT + 4,
+      stroke: "#ddd8cc", "stroke-width": 1}));
+    const lab = svgEl("text", {x: x(t), y: H - 1, "font-size": 10,
+      fill: "#8a8578", "text-anchor": "middle"});
+    lab.textContent = "$" + Math.round(t).toLocaleString("en-US");
+    svg.appendChild(lab);
+  }
+  const s = series.stats, midY = (TOP + BOT) / 2;
+  svg.appendChild(svgEl("line", {x1: x(s.min), y1: midY, x2: x(s.max),
+    y2: midY, stroke: "#5b7186", "stroke-width": 1.4}));
+  svg.appendChild(svgEl("line", {x1: x(s.min), y1: midY - 5, x2: x(s.min),
+    y2: midY + 5, stroke: "#5b7186", "stroke-width": 1.4}));
+  svg.appendChild(svgEl("line", {x1: x(s.max), y1: midY - 5, x2: x(s.max),
+    y2: midY + 5, stroke: "#5b7186", "stroke-width": 1.4}));
+  svg.appendChild(svgEl("rect", {x: x(s.p25), y: TOP,
+    width: Math.max(1.5, x(s.p75) - x(s.p25)), height: BOT - TOP,
+    fill: "#c3cfda", stroke: "#5b7186", "stroke-width": 1}));
+  svg.appendChild(svgEl("line", {x1: x(s.median), y1: TOP - 3,
+    x2: x(s.median), y2: BOT + 3, stroke: "#243b53", "stroke-width": 2.6}));
+  const dia = `${x(s.cheapest)},${midY - 6} ${x(s.cheapest) + 6},${midY} ` +
+              `${x(s.cheapest)},${midY + 6} ${x(s.cheapest) - 6},${midY}`;
+  const d = svgEl("polygon", {points: dia, fill: "#b7791f",
+    stroke: "#7c4a03", "stroke-width": 0.8});
+  const dt = el("title"); dt.textContent = "cheapest in frame " + money(s.cheapest);
+  d.appendChild(dt); svg.appendChild(d);
+  if (series.prior_ours_total !== null &&
+      series.prior_ours_total !== series.ours_total) {
+    const p = svgEl("circle", {cx: x(series.prior_ours_total), cy: midY,
+      r: 5.5, fill: "none", stroke: "#999", "stroke-width": 1.6});
+    const pt = el("title");
+    pt.textContent = "prior run's ours " + money(series.prior_ours_total);
+    p.appendChild(pt); svg.appendChild(p);
+  }
+  if (series.ours_total !== null) {
+    svg.appendChild(svgEl("circle", {cx: x(series.ours_total), cy: midY,
+      r: 9, fill: "none", stroke: "#1c1c1c", "stroke-width": 1.4}));
+    const o = svgEl("circle", {cx: x(series.ours_total), cy: midY, r: 5.5,
+      fill: "#1c1c1c", stroke: "#fff", "stroke-width": 1.4});
+    const ot = el("title");
+    ot.textContent = "ours " + money(series.ours_total);
+    o.appendChild(ot); svg.appendChild(o);
+  }
+  return svg;
+}
+
+/* ---------- trajectory small-multiple ------------------------------ */
+function trajectoryChart(series) {
+  const pts = series.trajectory.points;
+  const W = 500, H = 128, L = 8, R = 8, T = 10, B = 104;
+  const svg = svgEl("svg", {width: W, height: H});
+  if (!pts.length) return svg;
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) {
+    for (const v of [p.min, p.max, p.ours, p.cheapest_comp]) {
+      if (v !== null && v !== undefined) {
+        lo = Math.min(lo, v); hi = Math.max(hi, v);
+      }
+    }
+  }
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  const pad = Math.max(1, (hi - lo) * 0.08); lo -= pad; hi += pad;
+  const x = i => pts.length === 1 ? W / 2
+    : L + i / (pts.length - 1) * (W - L - R);
+  const y = v => T + (hi - v) / (hi - lo) * (B - T);
+  let changeNo = 0;
+  for (const ch of series.trajectory.definition_changes) {
+    const xm = (x(ch.before_index) + x(ch.after_index)) / 2;
+    svg.appendChild(svgEl("line", {x1: xm, y1: T - 4, x2: xm, y2: B + 2,
+      stroke: "#a33", "stroke-width": 1, "stroke-dasharray": "3 3"}));
+    const t = svgEl("text", {x: xm + 3, y: T + 6 + (changeNo % 2) * 11,
+      "font-size": 9, fill: "#a33"});
+    t.textContent = "frame definition changed";
+    svg.appendChild(t);
+    changeNo += 1;
+  }
+  pts.forEach((p, i) => {
+    svg.appendChild(svgEl("line", {x1: x(i), y1: y(p.min), x2: x(i),
+      y2: y(p.max), stroke: "#93a5b5", "stroke-width": 1}));
+    svg.appendChild(svgEl("rect", {x: x(i) - 2.5, y: y(p.p75), width: 5,
+      height: Math.max(1, y(p.p25) - y(p.p75)), fill: "#c3cfda",
+      stroke: "none"}));
+    const dia = `${x(i)},${y(p.frame_min) - 4} ${x(i) + 4},${y(p.frame_min)} ` +
+                `${x(i)},${y(p.frame_min) + 4} ${x(i) - 4},${y(p.frame_min)}`;
+    svg.appendChild(svgEl("polygon", {points: dia, fill: "#b7791f"}));
+    if (p.ours === null && p.ours_gone) {
+      const g = svgEl("polygon", {points:
+        `${x(i)},${y(p.frame_min) - 4.5} ${x(i) + 4.5},${y(p.frame_min)} ` +
+        `${x(i)},${y(p.frame_min) + 4.5} ${x(i) - 4.5},${y(p.frame_min)}`,
+        fill: "none", stroke: "#a33", "stroke-width": 1.2});
+      const gt = el("title");
+      gt.textContent = p.label + " — our listing was gone from the frame";
+      g.appendChild(gt); svg.appendChild(g);
+    }
+  });
+  const bySegment = new Map();
+  pts.forEach(p => {
+    if (p.ours !== null && p.segment !== null && p.segment !== undefined) {
+      if (!bySegment.has(p.segment)) bySegment.set(p.segment, []);
+      bySegment.get(p.segment).push(p);
+    }
+  });
+  for (const seg of bySegment.values()) {
+    const line = svgEl("polyline", {
+      points: seg.map(p => `${x(p.index)},${y(p.ours)}`).join(" "),
+      fill: "none", stroke: "#1c1c1c", "stroke-width": 1.4});
+    svg.appendChild(line);
+    for (const p of seg) {
+      const c = svgEl("circle", {cx: x(p.index), cy: y(p.ours), r: 2.6,
+        fill: "#1c1c1c"});
+      const t = el("title");
+      t.textContent = p.label + " — ours " + money(p.ours);
+      c.appendChild(t); svg.appendChild(c);
+    }
+  }
+  const first = svgEl("text", {x: L, y: H - 8, "font-size": 9.5,
+    fill: "#8a8578"});
+  first.textContent = pts[0].label;
+  svg.appendChild(first);
+  const last = svgEl("text", {x: W - R, y: H - 8, "font-size": 9.5,
+    fill: "#8a8578", "text-anchor": "end"});
+  last.textContent = pts[pts.length - 1].label;
+  svg.appendChild(last);
+  const rng = svgEl("text", {x: W - R, y: T + 2, "font-size": 9.5,
+    fill: "#8a8578", "text-anchor": "end"});
+  rng.textContent = money(lo + pad) + " – " + money(hi - pad);
+  svg.appendChild(rng);
+  return svg;
+}
+</script>
+<script>
+"use strict";
+/* ---------- decisions ---------------------------------------------- */
+function decisionCard(d) {
+  const wrap = el("div", "decision");
+  wrap.dataset.decisionId = (d.car || "") + "|" + (d.window || "");
+  const head = el("div");
+  const verdict = el("span", "verdict", d.decision || "");
+  head.appendChild(verdict);
+  head.appendChild(document.createTextNode(
+    " — " + (d.car_name || d.car || "") + " · " + (d.window || "")));
+  wrap.appendChild(head);
+  if (d.rationale) wrap.appendChild(el("p", null, d.rationale));
+  if (d.next_step) {
+    const ns = el("p");
+    const b = el("span", "verdict", "Next step: ");
+    ns.appendChild(b);
+    ns.appendChild(document.createTextNode(d.next_step));
+    wrap.appendChild(ns);
+  }
+  return wrap;
+}
+
+/* ---------- facts mini-table --------------------------------------- */
+function factRow(table, k, v) {
+  const tr = el("tr");
+  tr.appendChild(el("td", "k", k));
+  tr.appendChild(el("td", null, v));
+  table.appendChild(tr);
+}
+function factsTable(s) {
+  const t = el("table", "facts");
+  factRow(t, "Rank", s.rank === null ? "not in frame" :
+    s.rank + " of " + s.frame_size);
+  factRow(t, "Our total", money(s.ours_total));
+  factRow(t, "Prior run's ours", s.prior_ours_total === null ? "—" :
+    money(s.prior_ours_total) + (s.prior_run_time ?
+      " (at " + s.prior_run_time + ")" : ""));
+  factRow(t, "Cheapest competitor", money(s.cheapest_comp_total));
+  factRow(t, "Gap to #1", s.gap_to_first_signed === null ? "—" :
+    signedMoney(s.gap_to_first_signed) +
+    (s.gap_to_first_signed < 0 ? " (we lead)" : ""));
+  factRow(t, "Next above", s.next_above_total === null ? "—" :
+    money(s.next_above_total) + " (" +
+    signedMoney(s.next_above_gap) + ")");
+  if (s.depletion) {
+    factRow(t, "Depletion", s.depletion.disappeared + " gone (" +
+      s.depletion.disappeared_above_ours + " above ours)");
+  }
+  if (s.annotation.delta) factRow(t, "Change", s.annotation.delta);
+  return t;
+}
+
+/* ---------- one series card ---------------------------------------- */
+function seriesCard(s, axis) {
+  const card = el("article", "series");
+  card.dataset.seriesId = s.id;
+  card.dataset.car = s.car;
+  card.dataset.tier = s.window.tier;
+  const left = el("div", "chart");
+  const title = el("h3");
+  title.appendChild(document.createTextNode(
+    s.window.start_label + " · " + s.window.frame_label));
+  if (s.window.tags_label) {
+    title.appendChild(el("span", "tags", "  " + s.window.tags_label));
+  }
+  left.appendChild(title);
+  left.appendChild(candleStrip(s, axis));
+  const leg = el("p", "legend",
+    "whisker min–max · box p25–p75 · tick median · ◆ cheapest · ◎ ours" +
+    (s.prior_ours_total !== null &&
+     s.prior_ours_total !== s.ours_total ? " · ○ prior ours" : ""));
+  left.appendChild(leg);
+  const trajDetails = el("details", "traj");
+  trajDetails.dataset.traj = "1";
+  const sum = el("summary", null,
+    "Trajectory — " + s.trajectory.points.length +
+    " measurement runs" + (s.trajectory.definition_changes.length ?
+      " · " + s.trajectory.definition_changes.length +
+      " frame-definition change(s)" : ""));
+  trajDetails.appendChild(sum);
+  trajDetails.appendChild(trajectoryChart(s));
+  for (const ch of s.trajectory.definition_changes) {
+    if (ch.event) {
+      trajDetails.appendChild(el("p", "legend",
+        "Definition change before run " + (ch.after_index + 1) +
+        ": " + ch.event));
+    }
+  }
+  left.appendChild(trajDetails);
+  card.appendChild(left);
+
+  const right = el("div", "ann");
+  const ann = el("p", "fulltext", s.annotation.text);
+  ann.dataset.annotation = "1";
+  right.appendChild(ann);
+  if (s.annotation.flag_labels.length) {
+    const flags = el("div", "flags");
+    for (const f of s.annotation.flag_labels) {
+      flags.appendChild(el("span", "flag", f));
+    }
+    right.appendChild(flags);
+  }
+  right.appendChild(factsTable(s));
+  const fr = el("details", "framerows");
+  fr.appendChild(el("summary", null,
+    "Frame rows, exact (" + s.frame_values.length + ")"));
+  const ft = el("table", "exact framerows");
+  const ftr = el("tr");
+  for (const h of ["Listing", "Rating", "Trips", "Total"]) {
+    ftr.appendChild(el("th", null, h));
+  }
+  ft.appendChild(ftr);
+  for (const row of s.frame_values) {
+    const tr = el("tr", row.is_ours ? "oursrow" : null);
+    tr.appendChild(el("td", null,
+      (row.is_ours ? "OURS — " : "") + row.label.split(" · ").slice(1).join(" · ")));
+    tr.appendChild(el("td", null,
+      row.rating === null || row.rating === undefined ? "—" :
+        Number(row.rating).toFixed(2)));
+    tr.appendChild(el("td", null, intOr(row.trips)));
+    tr.appendChild(el("td", null, money(row.total)));
+    ft.appendChild(tr);
+  }
+  fr.appendChild(ft);
+  right.appendChild(fr);
+  card.appendChild(right);
+  return card;
+}
+
+/* ---------- exact-values table per car ------------------------------ */
+function exactTable(car) {
+  const t = el("table", "exact");
+  t.dataset.exactTable = car.id;
+  const head = el("tr");
+  for (const h of ["Series", "Min", "P25", "Median", "P75", "Max",
+                   "Ours", "Prior ours", "Rank", "Gap to #1",
+                   "Next above", "Cheapest comp", "Frame n"]) {
+    head.appendChild(el("th", null, h));
+  }
+  t.appendChild(head);
+  for (const s of car.series) {
+    const tr = el("tr");
+    tr.dataset.car = s.car;
+    tr.dataset.tier = s.window.tier;
+    tr.dataset.seriesRow = s.id;
+    const name = s.window.start_label + " · " + s.window.tier;
+    tr.appendChild(el("td", null, name));
+    for (const v of [s.stats.min, s.stats.p25, s.stats.median,
+                     s.stats.p75, s.stats.max, s.ours_total,
+                     s.prior_ours_total]) {
+      tr.appendChild(el("td", null, money(v)));
+    }
+    tr.appendChild(el("td", null, s.rank === null ? "—" :
+      s.rank + " of " + s.frame_size));
+    tr.appendChild(el("td", null, signedMoney(s.gap_to_first_signed)));
+    tr.appendChild(el("td", null, money(s.next_above_total)));
+    tr.appendChild(el("td", null, money(s.cheapest_comp_total)));
+    tr.appendChild(el("td", null, intOr(s.frame_size)));
+    t.appendChild(tr);
+  }
+  return t;
+}
+
+/* ---------- filters -------------------------------------------------- */
+function applyFilters() {
+  const car = document.getElementById("carFilter").value;
+  const frame = document.getElementById("frameFilter").value;
+  document.querySelectorAll(".series").forEach(card => {
+    const show = (car === "all" || card.dataset.car === car) &&
+                 (frame === "all" || card.dataset.tier === frame);
+    card.classList.toggle("hidden", !show);
+  });
+  document.querySelectorAll("[data-series-row]").forEach(row => {
+    const show = (car === "all" || row.dataset.car === car) &&
+                 (frame === "all" || row.dataset.tier === frame);
+    row.classList.toggle("hidden", !show);
+  });
+  document.querySelectorAll("section.car").forEach(sec => {
+    sec.classList.toggle("hidden",
+      car !== "all" && sec.dataset.car !== car);
+  });
+}
+
+/* ---------- render --------------------------------------------------- */
+function render(data) {
+  document.title = data.title + " — interactive prototype";
+  document.getElementById("title").textContent = data.title;
+  document.getElementById("asof").textContent =
+    "Data as of " + data.as_of;
+  document.getElementById("subheader").textContent =
+    data.subheader_lines.join(" ") + " · " + data.stage_label +
+    " · showing " + data.scope.in_scope_series +
+    " of " + (data.scope.in_scope_series +
+              data.scope.out_of_scope_series) +
+    " measured series (target day " + data.scope.target_start + ")";
+  const lede = document.getElementById("lede");
+  for (const line of data.lede || []) {
+    lede.appendChild(el("li", null, line));
+  }
+  if (!data.lede || !data.lede.length) lede.classList.add("hidden");
+  const cov = document.getElementById("coverage");
+  for (const line of data.coverage || []) {
+    cov.appendChild(el("div", null, line));
+  }
+  if (!data.coverage || !data.coverage.length) {
+    cov.classList.add("hidden");
+  }
+
+  const carFilter = document.getElementById("carFilter");
+  const frameFilter = document.getElementById("frameFilter");
+  const tiers = new Set();
+  for (const car of data.cars) {
+    const opt = el("option", null, car.name);
+    opt.value = car.id;
+    carFilter.appendChild(opt);
+    for (const s of car.series) tiers.add(s.window.tier);
+  }
+  for (const tier of tiers) {
+    const opt = el("option", null, tier);
+    opt.value = tier;
+    frameFilter.appendChild(opt);
+  }
+  carFilter.addEventListener("change", applyFilters);
+  frameFilter.addEventListener("change", applyFilters);
+  document.getElementById("trajToggle").addEventListener("change", ev => {
+    document.querySelectorAll("details.traj").forEach(d => {
+      d.classList.toggle("hidden", !ev.target.checked);
+    });
+  });
+  document.getElementById("expandTraj").addEventListener("click", () => {
+    document.querySelectorAll("details.traj").forEach(d => {
+      d.open = true;
+    });
+  });
+  document.getElementById("collapseTraj").addEventListener("click", () => {
+    document.querySelectorAll("details.traj").forEach(d => {
+      d.open = false;
+    });
+  });
+
+  const inScope = data.decisions_in_scope || [];
+  const omitted = data.omitted_decisions || [];
+  const dlist = document.getElementById("decisionList");
+  for (const d of inScope) {
+    dlist.appendChild(decisionCard(d));
+  }
+  if (!inScope.length && data.decisions_in_scope) {
+    dlist.appendChild(el("p", "sub", "No decisions recorded."));
+  }
+  const ow = document.getElementById("omittedWrap");
+  if (omitted.length) {
+    document.getElementById("omittedSummary").textContent =
+      omitted.length +
+      " decision(s) for other start dates (in data.json, not this " +
+      "day's picture)";
+    const olist = document.getElementById("omittedList");
+    for (const d of omitted) {
+      olist.appendChild(decisionCard(d));
+    }
+  } else {
+    ow.classList.add("hidden");
+  }
+  if (!data.decisions_in_scope && !data.omitted_decisions) {
+    /* Public (market-only) data carries no decisions at all:
+       hide the whole section rather than show an empty shell. */
+    document.getElementById("decisions").classList.add("hidden");
+  }
+
+  const main = document.getElementById("cars");
+  let seriesCount = 0;
+  for (const car of data.cars) {
+    const sec = el("section", "car");
+    sec.dataset.car = car.id;
+    sec.appendChild(el("h2", null, car.name));
+    sec.appendChild(el("p", "carnote", car.note_lines.join(" ")));
+    for (const s of car.series) {
+      sec.appendChild(seriesCard(s, car.axis));
+      seriesCount += 1;
+    }
+    sec.appendChild(el("h3", null, "Exact values — " + car.name));
+    sec.appendChild(exactTable(car));
+    main.appendChild(sec);
+  }
+
+  document.getElementById("footer").textContent =
+    "Source snapshot: " +
+    data.sources.snapshot + " · decisions: " +
+    (data.sources.decisions || "none") + " · check file: " +
+    (data.sources.check_file || "none") + " · schema " + data.schema +
+    ". Charts share one money axis per car; annotations are shown in " +
+    "full, with individual flag labels — no summarization.";
+  window.__dashboardStats = {
+    seriesCount: seriesCount,
+    decisionsInScope: (data.decisions_in_scope || []).length,
+    decisionsTotal: (data.decisions || []).length,
+    asOf: data.as_of
+  };
+  document.body.dataset.ready = "true";
+  document.body.dataset.seriesCount = String(seriesCount);
+}
+
+fetch("data.json", {cache: "no-store"})
+  .then(r => {
+    if (!r.ok) throw new Error("data.json: HTTP " + r.status);
+    return r.json();
+  })
+  .then(render)
+  .catch(err => {
+    const box = document.getElementById("error");
+    box.style.display = "block";
+    box.textContent = "Could not load data.json — " + err.message +
+      " (serve this folder over HTTP, e.g. python3 -m http.server)";
+    document.body.dataset.ready = "error";
+  });
+</script>
+</body>
+</html>
